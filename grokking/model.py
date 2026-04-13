@@ -35,43 +35,42 @@ def train_test_split(dset, train_frac=0.3):
 
 
 class Transformer(nn.Module):
-    def __init__(self, P, d_embed=128, n_blocks=1, n_mlp=512, n_att_heads=4):
+    def __init__(self, config):
         super().__init__()
 
-        self.P = P
-        self.d_embed = d_embed
-        self.n_blocks = n_blocks
-        self.n_mlp = n_mlp
-        self.n_att_heads = n_att_heads
+        self.config = config
 
         self.attention_heads = nn.ModuleList(
             [
-                MultiHeadAttention(d_model=d_embed, n_heads=n_att_heads)
-                for _ in range(n_blocks)
+                MultiHeadAttention(d_model=config.d_model, n_heads=config.n_heads)
+                for _ in range(config.n_blocks)
             ]
         )
 
         self.mlps = nn.ModuleList(
-            [MLP(d_in=d_embed, d_out=d_embed) for _ in range(n_blocks)]
+            [
+                MLP(d_in=config.d_model, d_out=config.d_model, d_hidden=config.d_mlp)
+                for _ in range(config.n_blocks)
+            ]
         )
 
-        self.w_embed = nn.Embedding(P + 1, d_embed)
-        self.w_unembed = nn.Linear(d_embed, P, bias=False)
+        self.w_embed = nn.Embedding(config.P + 1, config.d_model)
+        self.w_unembed = nn.Linear(config.d_model, config.P, bias=False)
 
         # Positional embedding
-        self.w_pos_emb = nn.Embedding(3, d_embed)
+        self.w_pos_emb = nn.Embedding(3, config.d_model)
 
     def forward(self, t):
         positions = torch.arange(3, device=t.device)
         x = self.w_embed(t) + self.w_pos_emb(positions)
-        for i in range(self.n_blocks):
+        for i in range(self.config.n_blocks):
             x += self.attention_heads[i](x)
             x += self.mlps[i](x)
         return self.w_unembed(x[:, 2, :])
 
 
 class MLP(nn.Module):
-    def __init__(self, d_in, d_out, d_hidden=512):
+    def __init__(self, d_in, d_out, d_hidden):
         super().__init__()
         self.mlp = nn.Sequential(
             nn.Linear(d_in, d_hidden), nn.ReLU(), nn.Linear(d_hidden, d_out)
@@ -121,11 +120,14 @@ class MultiHeadAttention(nn.Module):
 
 
 if __name__ == "__main__":
+    from grokking.config import TransformerConfig
+
     dset = ModPDataset(13)
     train_inputs, train_labels, test_inputs, test_labels = train_test_split(dset)
     print(train_inputs)
     print(train_labels)
 
-    tran = Transformer(13, n_att_heads=2)
+    cfg = TransformerConfig(P=13)
+    tran = Transformer(cfg)
     out = tran.forward(train_inputs)
     print(out[0])
