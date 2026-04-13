@@ -2,9 +2,6 @@ from torch.utils.data import Dataset
 import torch
 
 
-torch.manual_seed(42)
-
-
 class ModPDataset(Dataset):
     def __init__(self, P=113):
         self.P = P
