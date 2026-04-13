@@ -2,13 +2,11 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 import math
-
-
-torch.manual_seed(42)
+from grokking.config import TransformerConfig
 
 
 class Transformer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: TransformerConfig):
         super().__init__()
 
         self.config = config
@@ -37,8 +35,8 @@ class Transformer(nn.Module):
         positions = torch.arange(3, device=t.device)
         x = self.w_embed(t) + self.w_pos_emb(positions)
         for i in range(self.config.n_blocks):
-            x += self.attention_heads[i](x)
-            x += self.mlps[i](x)
+            x = x + self.attention_heads[i](x)
+            x = x + self.mlps[i](x)
         return self.w_unembed(x[:, 2, :])
 
 
