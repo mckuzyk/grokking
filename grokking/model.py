@@ -37,7 +37,10 @@ class Transformer(nn.Module):
         for i in range(self.config.n_blocks):
             x = x + self.attention_heads[i](x)
             x = x + self.mlps[i](x)
-        return self.w_unembed(x[:, 2, :])
+        # Only return vectors of "=" token
+        # Since x: (batch, sequence, embedding), and sequence = 3,
+        # the return value of interest is:
+        return self.w_unembed(x)[:, 2, :]
 
 
 class MLP(nn.Module):
