@@ -24,6 +24,8 @@ def train(model, cfg: TrainConfig):
         "test_loss": [],
         "train_acc": [],
         "test_acc": [],
+        "weight_norm": [],
+        "grad_norm": [],
     }
     for epoch in range(cfg.epochs):
         optimizer.zero_grad()
@@ -39,9 +41,21 @@ def train(model, cfg: TrainConfig):
 
         # Train
         logits = model.forward(train_inputs)
-        loss = loss_fn(logits, train_labels)
+        loss = loss_fn(logits.double(), train_labels)
         loss.backward()
         metrics["train_loss"].append(loss.item())
+
+        weight_norm = sum(p.norm().item() for p in model.parameters())
+        metrics["weight_norm"].append(weight_norm)
+        grad_norm = (
+            sum(
+                p.grad.norm().item() ** 2
+                for p in model.parameters()
+                if p.grad is not None
+            )
+            ** 0.5
+        )
+        metrics["grad_norm"].append(grad_norm)
 
         with torch.no_grad():
             train_acc = (logits.argmax(dim=-1) == train_labels).float().mean().item()
@@ -74,7 +88,9 @@ if __name__ == "__main__":
     from grokking import model, config
     import matplotlib.pyplot as plt
 
-    train_cfg = config.TrainConfig(save_path="runs/full_test_40k", epochs=40_000)
+    train_cfg = config.TrainConfig(
+        save_path="runs/full_test_100k_float64", epochs=100_000
+    )
     torch.manual_seed(train_cfg.random_seed)
 
     model_cfg = config.TransformerConfig(P=113)
@@ -90,5 +106,11 @@ if __name__ == "__main__":
     plt.figure()
     plt.plot(metrics["train_acc"])
     plt.plot(metrics["test_acc"])
+
+    plt.figure()
+    plt.plot(metrics["weight_norm"])
+
+    plt.figure()
+    plt.plot(metrics["grad_norm"])
 
     plt.show()
