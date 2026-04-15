@@ -11,7 +11,13 @@ def train(model, cfg: TrainConfig):
     model.config.save(save_path / "model_config.json")
     cfg.save(save_path / "training_config.json")
     optimizer = torch.optim.AdamW(
-        model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay
+        model.parameters(),
+        lr=cfg.lr,
+        weight_decay=cfg.weight_decay,
+        betas=(cfg.beta1, cfg.beta2),
+    )
+    scheduler = torch.optim.lr_scheduler.LambdaLR(
+        optimizer, lambda epoch: min(epoch / cfg.warmup_steps, 1.0)
     )
     loss_fn = torch.nn.CrossEntropyLoss()
 
@@ -33,7 +39,7 @@ def train(model, cfg: TrainConfig):
         # Test
         with torch.no_grad():
             logits = model.forward(test_inputs)
-            t_loss = loss_fn(logits, test_labels).item()
+            t_loss = loss_fn(logits.double(), test_labels).item()
             metrics["test_loss"].append(t_loss)
 
             test_acc = (logits.argmax(dim=-1) == test_labels).float().mean().item()
@@ -62,6 +68,7 @@ def train(model, cfg: TrainConfig):
         metrics["train_acc"].append(train_acc)
 
         optimizer.step()
+        scheduler.step()
 
         if epoch % cfg.checkpoint_every == 0:
             torch.save(model.state_dict(), save_path / f"model_state_dict_{epoch}.pt")
@@ -87,14 +94,18 @@ def train(model, cfg: TrainConfig):
 if __name__ == "__main__":
     from grokking import model, config
     import matplotlib.pyplot as plt
+    import math
 
     train_cfg = config.TrainConfig(
-        save_path="runs/full_test_100k_float64", epochs=100_000
+        save_path="runs/test_beta_lr_sched_weight_init", epochs=40_000
     )
     torch.manual_seed(train_cfg.random_seed)
 
     model_cfg = config.TransformerConfig(P=113)
     trans = model.Transformer(model_cfg)
+
+    for name, param in trans.named_parameters():
+        torch.nn.init.normal_(param, mean=0, std=1 / math.sqrt(trans.config.d_model))
 
     trans, metrics = train(trans, train_cfg)
 

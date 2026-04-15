@@ -31,6 +31,12 @@ class Transformer(nn.Module):
         # Positional embedding
         self.w_pos_emb = nn.Embedding(3, config.d_model)
 
+        self._init_weights()
+
+    def _init_weights(self):
+        for param in self.parameters():
+            nn.init.normal_(param, mean=0, std=1 / math.sqrt(self.config.d_model))
+
     def forward(self, t):
         positions = torch.arange(3, device=t.device)
         x = self.w_embed(t) + self.w_pos_emb(positions)

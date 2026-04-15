@@ -40,13 +40,16 @@ class TrainConfig(Config):
     random_seed: int = 42
     epochs: int = 10_000
     checkpoint_every: int = 100
+    warmup_steps: int = 10
 
     # Train/Test data
     train_frac: float = 0.3
 
     # AdamW arguments
-    lr: float = 1e-3
-    weight_decay: float = 1.0
+    lr: float = 1e-3  # Specified in paper
+    weight_decay: float = 1.0  # Specified in paper
+    beta1: float = 0.9  # Default in torch
+    beta2: float = 0.98  # Used by Nanda
 
     def __post_init__(self):
         if self.save_path is None:
