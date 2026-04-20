@@ -9,11 +9,13 @@ class Transformer(nn.Module):
     def __init__(self, config: TransformerConfig):
         super().__init__()
 
+        # Need this for hooking in later for analysis
+        attention_cls = getattr(self, "attention_cls", MultiHeadAttention)
         self.config = config
 
         self.attention_heads = nn.ModuleList(
             [
-                MultiHeadAttention(d_model=config.d_model, n_heads=config.n_heads)
+                attention_cls(d_model=config.d_model, n_heads=config.n_heads)
                 for _ in range(config.n_blocks)
             ]
         )
