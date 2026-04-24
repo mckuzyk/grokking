@@ -92,13 +92,72 @@ def embedding_fft(r: Results):
     fft_powers = np.mean(np.abs(w_embed_fft) ** 2, axis=1)
     peaks = a.find_fft_peaks(fft_powers[: r.cfg.P // 2], height=0.3)
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(7, 3.5))
     ax.bar(np.arange(w_embed.shape[0]), fft_powers)
     for peak in peaks:
         ax.axvline(peak, color=COLOR_HIGHLIGHT)
     ax.set_xlim(0, r.cfg.P // 2)
     ax.set_xlabel("k (Frequency Index)")
     ax.set_ylabel("Fourier Power")
+
+    return fig, ax
+
+
+def embedding_fft_before_after(r: Results):
+    w_embed_final = r.model.w_embed.weight.detach().numpy()  # (P, d_model)
+    w_embed_fft_final = np.fft.fft(w_embed_final, axis=0)
+    fft_cos_final = np.mean(np.abs(np.real(w_embed_fft_final)), axis=1)
+    fft_sin_final = np.mean(np.abs(np.imag(w_embed_fft_final)), axis=1)
+
+    r.load_checkpoint(1)
+    init_epoch = r.current_epoch
+    w_embed_init = r.model.w_embed.weight.detach().numpy()  # (P, d_model)
+    w_embed_fft_init = np.fft.fft(w_embed_init, axis=0)
+    fft_cos_init = np.mean(np.abs(np.real(w_embed_fft_init)), axis=1)
+    fft_sin_init = np.mean(np.abs(np.imag(w_embed_fft_init)), axis=1)
+
+    r.load_checkpoint(-1)  # So downstream functions using r don't get screwed up
+
+    fig, ax = plt.subplots(2, 1, sharex=True, sharey=True)
+    fig.subplots_adjust(hspace=0.4)
+    ax[0].bar(
+        np.arange(w_embed_init.shape[0]),
+        fft_cos_init,
+        align="edge",
+        width=0.4,
+        label="cos",
+    )
+    ax[0].bar(
+        np.arange(w_embed_init.shape[0]),
+        fft_sin_init,
+        align="edge",
+        width=-0.4,
+        label="sin",
+    )
+    ax[1].bar(
+        np.arange(w_embed_final.shape[0]),
+        fft_cos_final,
+        align="edge",
+        width=0.4,
+        label="cos",
+    )
+    ax[1].bar(
+        np.arange(w_embed_final.shape[0]),
+        fft_sin_final,
+        align="edge",
+        width=-0.4,
+        label="sin",
+    )
+    ax[1].set_xlim(0, r.cfg.P // 2)
+    ax[1].set_xlabel("k (Frequency Index)")
+    ax[1].set_ylabel("Fourier Amplitude")
+    ax[0].set_ylabel("Fourier Amplitude")
+
+    ax[0].set_title(f"Epoch {init_epoch} (memorization)")
+    ax[1].set_title(f"Epoch {r.current_epoch} (generalization)")
+
+    ax[0].legend()
+    ax[1].legend()
 
     return fig, ax
 
@@ -342,24 +401,27 @@ def output_logits(r: Results):
         cons.append(freq_con)
 
     fig, ax = plt.subplots(3, 1, sharex=True)
-    ax[0].plot(np.array(cons).sum(axis=0))
-    ax[0].plot(logits, "o")
+    ax[0].plot(np.array(cons).sum(axis=0), label="key freq.\ncontributions")
+    ax[0].plot(logits, "o", label="logits")
     ax[0].axvline(87, color=COLOR_HIGHLIGHT, linewidth=1.0, alpha=0.8)
     ax[0].set_ylabel("Logit")
 
     con = a.frequency_contribution(logits, 1, r.cfg.P)
     for k in range(1, 113 // 2):
         con += a.frequency_contribution(logits, k, r.cfg.P)
-    ax[1].plot(con)
-    ax[1].plot(logits, "o")
+    ax[1].plot(con, label="all freq.\ncontributions")
+    ax[1].plot(logits, "o", label="logits")
     ax[1].axvline(87, color=COLOR_HIGHLIGHT, linewidth=1.0, alpha=0.8)
     ax[1].set_ylabel("Logit")
 
-    ax[2].plot(a.softmax(logits), ".")
+    ax[2].plot(a.softmax(np.array(cons).sum(axis=0)), ".")
     ax[2].axvline(87, color=COLOR_HIGHLIGHT, linewidth=1.0, alpha=0.8)
 
     ax[2].set_xlabel("Output Token c")
     ax[2].set_ylabel("Probability")
+
+    ax[0].legend(loc="center left", bbox_to_anchor=(1, 0.5))
+    ax[1].legend(loc="center left", bbox_to_anchor=(1, 0.5))
 
     return fig, ax
 
@@ -376,32 +438,45 @@ def get_peaks(r: Results):
 if __name__ == "__main__":
     path = Path("runs") / "baseline_weight_init_seed_137"
     r = Results(path)
+    save_path = (
+        Path().home()
+        / "mckuzyk.com/content/posts/transformers-grokking-modular-arithmetic/images/"
+    )
 
     fig, ax = training_dynamics(r)
-    fig.savefig("training_dynamics.png")
+    #    fig.savefig("figures/training_dynamics.png")
+    fig.savefig(save_path / "training_dynamics.svg")
     fig2, ax2 = implementation_details_comparisons(
         r,
         Results(Path("runs") / "baseline_seed_137"),
         Results(Path("runs") / "full_test_60k"),
     )
-    fig2.savefig("implementation_details.png")
+    #    fig2.savefig("figures/implementation_details.png")
+    fig2.savefig(save_path / "implementation_details.svg")
 
     fig3, ax3 = embedding_fft(r)
-    fig3.savefig("embedding_fft.png")
+    #    fig3.savefig("figures/embedding_fft.png")
+    fig3.savefig(save_path / "embedding_fft.svg")
 
     fig4, ax4 = embedding_pca(r)
-    fig4.savefig("embedding_pca.png")
+    #    fig4.savefig("figures/embedding_pca.png")
+    fig4.savefig(save_path / "embedding_pca.svg")
 
     fig5, ax5 = attention_heatmaps(r)
-    fig5.savefig("attention_heatmaps.png")
+    fig5.savefig(save_path / "attention_heatmaps.png")
 
     fig6, ax6 = attention_fft_2d(r)
-    fig6.savefig("attention_fft_2d.png")
+    fig6.savefig(save_path / "attention_fft_2d.png")
 
     fig10, ax10 = cascaded_ffts(r)
-    fig10.savefig("cascaded_ffts.png")
+    #    fig10.savefig("figures/cascaded_ffts.png")
+    fig10.savefig(save_path / "cascaded_ffts.svg")
 
     fig11, ax11 = output_logits(r)
-    fig11.savefig("output_logits.png")
+    #    fig11.savefig("figures/output_logits.png")
+    fig11.savefig(save_path / "output_logits.svg")
+
+    fig12, ax12 = embedding_fft_before_after(r)
+    fig12.savefig(save_path / "embedding_fft_before_after.svg")
 
     plt.show()
